@@ -1,0 +1,629 @@
+function _circleRadiusSelector(slider){return(
+slider({
+  min: 1, 
+  max: 10,
+  step: 0.1,
+  title: "Point size", 
+  description: "Adjust the size of the points shown in the scatter plot.",
+  value: 4
+})
+)}
+
+function _xAxisSelect(select,listCategories){return(
+select({
+  title: "X-axis",
+  description: "Pick a category for the x-axis",
+  options: listCategories, // use the list of years generated in the previous cell
+  value: "ROBBERY" // default value
+})
+)}
+
+function _yAxisSelect(select,listCategories){return(
+select({
+  title: "Y-axis",
+  description: "Pick a category for the y-axis",
+  options: listCategories, // use the list of years generated in the previous cell
+  value: "DRUNKENNESS" // default value
+})
+)}
+
+function _scatterplot(DOM,size,d3,margin,xAxis,xAxisSelect,yAxis,yAxisSelect,width,district_DF,circleRadiusSelector,xScale,yScale)
+{
+  
+    let root = this; // make refernce to the root of the DOM. need this global reference to be able to work with the plot from within both of the 'if' and 'else' block. They modify the global variable.
+  const trans = 1000 // make the transition equal to 1 sec
+  
+   if (!root) {
+
+       root = DOM.svg(size.width + 100, size.height+30); // modify the root reference
+       var svg = d3.select(root) // make d3 referene to the newly created DOM root svg element
+
+      // draw x axis with correct label range and nice ticks
+        svg.append('g')
+            .attr("class", "xaxis")
+            .attr('transform', `translate(0, ${size.height - margin.bottom})`)
+            .call(xAxis);
+
+        // label the x axis
+        svg.append('text')
+            .attr("class", "xaxislabel")
+            .attr('transform', `translate(${size.width/2}, ${size.height + 15})`)
+            .style("text-anchor", "middle") // instead of setting the x coordinate
+            .text("Number of " + xAxisSelect + " cases")
+            .attr("font-size", "12");
+
+        // draw y axis with correct label range and nice ticks
+        svg.append('g') // make a contianer element for grouping together graphic elements related to the y axis
+            .attr("class", "yaxis")
+            .attr('transform', `translate(${margin.left}, 0)`)
+            .call(yAxis);
+
+        // label the y axis
+        svg.append("text")
+            .attr("class", "yaxislabel")
+            .attr("transform", "rotate(-90)")
+            .attr("y", margin.left/2 - 20)
+            .attr("x", -size.height/2)
+            .style("text-anchor", "middle")
+            .attr("font-size", "12")
+            .text("Number of " + yAxisSelect + " cases");
+
+        // append labels container, which is used to show the label for each point
+        svg.append("g")
+          .attr("class", "labels");
+     
+     // brushing code, gotten from https://observablehq.com/@d3/brushable-scatterplot
+     // call brushing code before plotting points to get mouseover functionality as well
+     // https://stackoverflow.com/a/13818606
+     var value = [];
+     svg.property("value", value).dispatch("input"); // initialize to show barcharts without a selection
+     svg.append("g")
+      .attr("class", "brush")
+      .call(d3.brush()
+          .extent([[margin.left, margin.top], [width - margin.right, size.height - margin.bottom]])
+          .on("start brush end", brushed));
+
+        // draw the circles and add labels
+        var dots = svg.append("g")
+                  //set common attributes for all points that are part of the newly created g element (container)
+                  .attr("class", "point")
+                  .attr("stroke", "#000") // set stroke color (outline around the point)
+                  .attr("stroke-opacity", 0.5) // set the opacity of the stroke
+                  .style("fill", '#44bff4') // set the color of the points
+                  .style("fill-opacity", 0.8)
+                  // actually create each point
+                  .selectAll("g")
+                  .data(district_DF) // bind data (array) to the g element (container for the points)
+                  .enter().append("circle") // add a circle figure (a point) for each entry in the data array
+                    // set specific attributes for each point upon creation
+                      .attr("r", d => (Number(d['TOTAL']) / 50000) * circleRadiusSelector) // set the size of the points
+                      .attr("cx", d => xScale(d[xAxisSelect])) // set the x positions of the points
+                      .attr("cy", d => yScale(d[yAxisSelect])) // set the y position of the points       
+                    // add mouseover functionality for each point
+                    .on('mouseover', function (d, i) {
+                      d3.select(this).transition(150)
+                        .style("fill", "red")
+                        .style("opacity", "1");
+                      // when the mouse goes over a point, then add that point's label to the global svg.labels element
+                      svg.labels = svg.select("g.labels")
+                        .attr("font-family", "Arial")
+                        .attr("font-size", 12)
+                        .selectAll("text")
+                        .data(district_DF)
+                        .join("text")
+                        .attr("x", xScale(Number(d[xAxisSelect])) + 20)
+                        .attr("y", yScale(Number(d[yAxisSelect])))
+                        .text(d.PdDistrict);
+                    })
+                    // add mouseout functionality for each point
+                    .on('mouseout', function (d, i) {
+                    d3.select(this).transition(100)
+                      .style("fill", "#44bff4")
+                    //.attr("fill-opacity", 1)
+                    //.attr("stroke", "#000")
+                    //.attr("stroke-opacity", 1)
+                    //.attr("stroke-width", 1);
+                    svg.select("g.labels")
+                      .text(""); // remove the point's label from the global svg.labels element
+
+      });
+
+     // brushing code, gotten from https://observablehq.com/@d3/brushable-scatterplot
+  function brushed() {
+    let value = [];
+    if (d3.event.selection) {
+      const [[x0, y0], [x1, y1]] = d3.event.selection;
+      value = district_DF.filter(d => x0 <= xScale(d[xAxisSelect]) && xScale(d[xAxisSelect]) < x1 && y0 <= yScale(d[yAxisSelect]) && yScale(d[yAxisSelect]) < y1);
+    }
+    svg.property("value", value).dispatch("input");
+  }
+     
+   } else {
+     
+     // update x axis values
+     d3.select("g.xaxis")
+       .transition()
+       .call(xAxis);
+     
+     // update y axis values
+     d3.select("g.yaxis")
+        .transition()
+        .call(yAxis);
+     
+     // update the axis labels - https://groups.google.com/forum/#!topic/d3-js/Kv5tGe-s7dE
+     d3.select("text.xaxislabel").text("Number of " + xAxisSelect + " cases");
+     d3.select("text.yaxislabel").text("Number of " + yAxisSelect + " cases");
+     
+     // update the position of the points with smooth transition
+     d3.select(root).selectAll("circle")
+       .data(district_DF) // bind the new data to the selection
+       .transition() // interpolate the points smoothly over time (animate a smooth transition)
+       .duration(trans)
+       .attr("r", d => (Number(d['TOTAL']) / 50000) * circleRadiusSelector) // set the size of the points
+       .attr("cx", d => xScale(d[xAxisSelect])) // set the x positions of the points
+       .attr("cy", d => yScale(d[yAxisSelect])) // set the y position of the points
+     
+     // update the position of the mouse over labels for the points
+     d3.select(root).selectAll("circle")
+                    .on('mouseover', function (d, i) {
+                      d3.select(this).transition(150)
+                        .style("fill", "red")
+                        .style("opacity", "1");
+                      svg.labels = svg.select("g.labels")
+                        .attr("font-family", "Arial")
+                        .attr("font-size", 12)
+                        .selectAll("text")
+                        .data(district_DF)
+                        .join("text")
+                        .attr("x", xScale(Number(d[xAxisSelect])) + 20)
+                        .attr("y", yScale(Number(d[yAxisSelect])))
+                        .text(d.PdDistrict);
+                    })
+                    .on('mouseout', function (d, i) {
+                    d3.select(this).transition(100)
+                      .style("fill", "#44bff4")
+                    svg.select("g.labels")
+                      .text("");
+
+      });
+    
+      var svg = d3.select(root)
+      
+      // update brush mapping for new point positions
+      d3.select("g.brush").call(d3.brush()
+          .extent([[margin.left, margin.top], [width - margin.right, size.height - margin.bottom]])
+          .on("start brush end", brushed));
+     
+      function brushed() {
+      let value = [];
+      if (d3.event.selection) {
+        const [[x0, y0], [x1, y1]] = d3.event.selection;
+        value = district_DF.filter(d => x0 <= xScale(d[xAxisSelect]) && xScale(d[xAxisSelect]) < x1 && y0 <= yScale(d[yAxisSelect]) && yScale(d[yAxisSelect]) < y1);
+      }
+      svg.property("value", value).dispatch("input");
+    }
+        
+   }
+  
+  return root;
+}
+
+
+function _brushSelection(unpack,scatterplot){return(
+unpack(scatterplot, 'PdDistrict')
+)}
+
+function _barchartt1(DOM,chartsize,d3,chart1,xScaleChart1,yScaleChart1,xAxisChart1,yAxisChart1,margin,size,xAxisSelect,chart2,xScaleChart2,yScaleChart2,xAxisChart2,yAxisChart2,yAxisSelect)
+{
+  
+  let barplot1 = this;
+  const t = 500;
+  
+  if (!barplot1) {
+    
+    barplot1 = DOM.svg(900 , chartsize.height+30); // modify the root reference
+    //var svg = d3.select(barplot1) // make d3 referene to the newly created DOM root svg element
+    // const svg = d3.select(DOM.svg(width, size.height));
+    
+    /*
+    svg.append("rect")
+      .attr("width", 800)
+      .attr("height", chartsize.height+30)
+      .style("fill", "lightblue");
+      */
+  
+    // ------ barchart 1 ------ //
+    
+    var svg1 = d3.select(barplot1).append("svg")
+        .attr("class", "svg1");
+        //.attr("width",400)
+        //.attr("height",400);
+    
+    svg1.append("g")
+        .attr("class", "chart1bars")
+        .attr("fill", "steelblue")
+      .selectAll("rect")
+      .data(chart1)
+      .join("rect")
+        .attr("x", d => xScaleChart1(d.key))
+        .attr("y", d => yScaleChart1(d.value))
+        .attr("height", d => yScaleChart1(0) - yScaleChart1(d.value))
+        .attr("width", xScaleChart1.bandwidth());
+
+    svg1.append("g")
+        .attr("class", "chart1xaxis")
+        .call(xAxisChart1)
+        .selectAll("text")
+        .attr("transform", "rotate(-60)")
+        .style("text-anchor", "end")
+        .attr("x", -8)
+        .attr("y", 3);
+
+    svg1.append("g")
+        .attr("class", "chart1yaxis")
+        .call(yAxisChart1);
+    
+    // label the x axis
+    svg1.append('text')
+      .attr("class", "chart1label")
+      .attr("transform", "rotate(-90)")
+      .attr("y", margin.left/2 - 15)
+      .attr("x", -size.height/2 + 60)
+      .style("text-anchor", "middle") // instead of setting the x coordinate
+      .text(xAxisSelect)
+      .attr("font-size", "12");
+    
+    // ----- barchart 2 ----- //
+    
+    var svg2 = d3.select(barplot1).append("svg")
+      .attr("class", "svg2")
+      //.attr("width", 400)
+      //.attr("height", 400)
+      .attr("x", 430);
+    
+     svg2.append("g")
+            .attr("class", "chart2bars")
+        .attr("fill", "steelblue")
+      .selectAll("rect")
+      .data(chart2)
+      .join("rect")
+        .attr("x", d => xScaleChart2(d.key))
+        .attr("y", d => yScaleChart2(d.value))
+        .attr("height", d => yScaleChart2(0) - yScaleChart2(d.value))
+        .attr("width", xScaleChart2.bandwidth());
+
+    svg2.append("g")
+        .attr("class", "chart2xaxis")
+        .call(xAxisChart2)
+        .selectAll("text")
+        .attr("transform", "rotate(-60)")
+        .style("text-anchor", "end")
+        .attr("x", -8)
+        .attr("y", 3);
+
+    svg2.append("g")
+        .attr("class", "chart2yaxis")
+        .call(yAxisChart2);
+    
+    // label the x axis
+    svg2.append('text')
+      .attr("class", "chart2label")
+      .attr("transform", "rotate(-90)")
+      .attr("y", margin.left/2 - 15)
+      .attr("x", -size.height/2 + 60)
+      .style("text-anchor", "middle") // instead of setting the x coordinate
+      .text(yAxisSelect)
+      .attr("font-size", "12");
+   
+  }
+  else {
+    
+    // update labels for the charts
+    d3.select(barplot1).select("text.chart1label").text(xAxisSelect);
+    d3.select(barplot1).select("text.chart2label").text(yAxisSelect);
+    
+    // update the y axis for barchart 1
+    d3.selectAll("g.chart1yaxis")
+        .transition()
+        .call(yAxisChart1);
+    
+    // update the y axis for barchart 2
+    d3.selectAll("g.chart2yaxis")
+        .transition()
+        .call(yAxisChart2);
+    
+    // update the bars for barchart 1
+    d3.select(barplot1).select("svg.svg1").select("g.chart1bars").selectAll("rect")
+       .data(chart1)
+       .transition() 
+       .duration(t)
+       .attr("y", d => yScaleChart1(d.value))
+       .attr("height", d => yScaleChart1(0) - yScaleChart1(d.value))
+    
+   // update the bars for barchart 2 
+   d3.select(barplot1).select("svg.svg2").select("g.chart2bars").selectAll("rect")
+       .data(chart2)
+       .transition() 
+       .duration(t)
+       .attr("y", d => yScaleChart2(d.value))
+       .attr("height", d => yScaleChart2(0) - yScaleChart2(d.value))  
+   
+    
+  }
+  
+ return barplot1;
+}
+
+
+function _d3(require){return(
+require("d3@5")
+)}
+
+function _district_DF(d3){return(
+d3.csv('https://gist.githubusercontent.com/Zanduz/0fac5199474d261bf9c67cb00581ec9e/raw/8b2c7e87cf6362f1976d37a3e2c0cf3338c4eb26/district_DF.csv')
+)}
+
+function _district_year_DF(d3){return(
+d3.csv('https://gist.githubusercontent.com/Zanduz/344103b61a181c3a4fa693ac97e94a59/raw/2437ae376f8510710d6393877fc4c333011679d9/district_year_DF.csv')
+)}
+
+function _listCategories(district_DF){return(
+district_DF.columns.slice(2,16)
+)}
+
+function _listYears(district_year_DF)
+{
+  var visited = [], output = [], l = district_year_DF.length, i;
+  for(i=0; i<l; i++) {
+      if(visited[district_year_DF[i].Year]) continue; // if the years
+      visited[district_year_DF[i].Year] = true;
+      output.push(district_year_DF[i].Year);
+  }
+  return output.sort();
+}
+
+
+function _chartsize(){return(
+{width: 400, height: 300}
+)}
+
+function _margin(){return(
+{top: 12, right: 10, bottom: 26, left: 60}
+)}
+
+function _unpack(){return(
+function unpack(rows, key) {
+  return rows.map(function(row) { 
+    if (rows[key] == "") {
+      return []; 
+    }
+    else {
+      return row[key];   
+    }
+  });    
+}
+)}
+
+function _22(md){return(
+md`**Scatter plot dependencies**`
+)}
+
+function _size(){return(
+{width: Math.min(window.innerWidth, 800), height: 400}
+)}
+
+function _xScale(d3,district_DF,xAxisSelect,margin,size){return(
+d3.scaleLinear()
+			.domain([0, d3.max(district_DF, d => parseInt(d[xAxisSelect]))]).nice() // use dataset 'data' to get global max
+			.range([margin.left, size.width - margin.right])
+)}
+
+function _yScale(d3,district_DF,yAxisSelect,size,margin){return(
+d3.scaleLinear()
+			.domain([0, d3.max(district_DF, d => parseInt(d[yAxisSelect]))]).nice()
+			.range([size.height - margin.bottom, margin.top])
+)}
+
+function _xAxis(d3,xScale){return(
+d3.axisBottom(xScale)
+)}
+
+function _yAxis(d3,yScale){return(
+d3.axisLeft(yScale)
+)}
+
+function _28(md){return(
+md`**Barchart 1 dependencies**`
+)}
+
+function _chart1(brushSelection,listYears,district_year_DF,xAxisSelect)
+{
+  let list = []; // output list
+  var y, d; // iterators to go through the list of years and districts
+  
+  if (brushSelection.length == 0) { // if no district has been brushed/selected
+     for (y = 0; y < listYears.length; y++) {
+        var currYear = listYears[y]
+        var yearTotal = 0;
+        for (var i = 0; i < district_year_DF.length; i++) {
+           if (district_year_DF[i].Year == currYear) {
+              yearTotal += Number(district_year_DF[i][xAxisSelect]) 
+           }
+        }
+        list.push({key: String(currYear), value: yearTotal})
+     }
+     return list;
+   } 
+   else { // else, if at least one district has been brushed/selected
+     for (y = 0; y < listYears.length; y++) {  // for each unique year in the data
+        var currYear = listYears[y] // set current year
+        var yearTotal = 0; // reset total count of cases for the given crime in the current year
+        for (d = 0; d < brushSelection.length; d++) { // for each brushed/selected district
+          var currDistrict = brushSelection[d] // set current district
+          for (var i = 0; i < district_year_DF.length; i++) { // iterate through each row in the full dataset
+            // if a row matches the current year and district
+            if (district_year_DF[i].PdDistrict == currDistrict && district_year_DF[i].Year == currYear) {
+              // add the case count for the given category to the total count
+              yearTotal += Number(district_year_DF[i][xAxisSelect]) 
+            }
+          }
+        }
+       // push the current year as key and the total count of cases for the year as key/value pair to the list 
+       list.push({key: String(currYear), value: yearTotal}) 
+     }
+     return list;
+    }
+}
+
+
+function _xScaleChart1(d3,chart1,margin,chartsize){return(
+d3.scaleBand()
+    .domain(chart1.map(d => d.key))
+    .range([margin.left, chartsize.width - margin.right])
+    .padding(0.1)
+)}
+
+function _yScaleChart1(d3,chart1,chartsize,margin){return(
+d3.scaleLinear()
+    .domain([0, d3.max(chart1, d => d.value)]).nice()
+    .range([chartsize.height - margin.bottom, margin.top])
+)}
+
+function _xAxisChart1(chartsize,margin,d3,xScaleChart1){return(
+g => g
+    .attr("transform", `translate(0,${chartsize.height - margin.bottom})`)
+    .call(d3.axisBottom(xScaleChart1).tickSizeOuter(0))
+)}
+
+function _yAxisChart1(margin,d3,yScaleChart1){return(
+g => g
+    .attr("transform", `translate(${margin.left},0)`)
+    .call(d3.axisLeft(yScaleChart1))
+    .call(g => g.select(".domain").remove())
+)}
+
+function _34(md){return(
+md`**Barchart 2 dependencies**`
+)}
+
+function _chart2margin(){return(
+{top: 12, right: 10, bottom: 26, left: 10}
+)}
+
+function _chart2(brushSelection,listYears,district_year_DF,yAxisSelect)
+{
+  let list = []; // output list
+  var y, d; // iterators to go through the list of years and districts
+  
+  if (brushSelection.length == 0) { // if no district has been brushed/selected
+     for (y = 0; y < listYears.length; y++) {
+        var currYear = listYears[y]
+        var yearTotal = 0;
+        for (var i = 0; i < district_year_DF.length; i++) {
+           if (district_year_DF[i].Year == currYear) {
+              yearTotal += Number(district_year_DF[i][yAxisSelect]) 
+           }
+        }
+        list.push({key: String(currYear), value: yearTotal})
+     }
+     return list;
+   } 
+   else { // else, if at least one district has been brushed/selected
+     for (y = 0; y < listYears.length; y++) {  // for each unique year in the data
+        var currYear = listYears[y] // set current year
+        var yearTotal = 0; // reset total count of cases for the given crime in the current year
+        for (d = 0; d < brushSelection.length; d++) { // for each brushed/selected district
+          var currDistrict = brushSelection[d] // set current district
+          for (var i = 0; i < district_year_DF.length; i++) { // iterate through each row in the full dataset
+            // if a row matches the current year and district
+            if (district_year_DF[i].PdDistrict == currDistrict && district_year_DF[i].Year == currYear) {
+              // add the case count for the given category to the total count
+              yearTotal += Number(district_year_DF[i][yAxisSelect]) 
+            }
+          }
+        }
+       // push the current year as key and the total count of cases for the year as key/value pair to the list 
+       list.push({key: String(currYear), value: yearTotal}) 
+     }
+     return list;
+    }
+}
+
+
+function _xScaleChart2(d3,chart2,margin,chartsize){return(
+d3.scaleBand()
+    .domain(chart2.map(d => d.key))
+    .range([margin.left, chartsize.width - margin.right])
+    .padding(0.1)
+)}
+
+function _yScaleChart2(d3,chart2,chartsize,chart2margin){return(
+d3.scaleLinear()
+    .domain([0, d3.max(chart2, d => d.value)]).nice()
+    .range([chartsize.height - chart2margin.bottom, chart2margin.top])
+)}
+
+function _xAxisChart2(chartsize,chart2margin,d3,xScaleChart2){return(
+g => g
+    .attr("transform", `translate(0,${chartsize.height - chart2margin.bottom})`)
+    .call(d3.axisBottom(xScaleChart2).tickSizeOuter(0))
+)}
+
+function _yAxisChart2(d3,yScaleChart2){return(
+g => g
+    .attr("transform", `translate(60,0)`)
+    .call(d3.axisLeft(yScaleChart2))
+    .call(g => g.select(".domain").remove())
+)}
+
+export default function define(runtime, observer) {
+  const main = runtime.module();
+  main.variable(observer()).define(["md"], _1);
+  main.variable(observer()).define(["md"], _2);
+  main.variable(observer()).define(["md"], _3);
+  main.variable(observer()).define(["md"], _4);
+  main.variable(observer()).define(["md"], _5);
+  main.variable(observer()).define(["md"], _6);
+  main.variable(observer("viewof circleRadiusSelector")).define("viewof circleRadiusSelector", ["slider"], _circleRadiusSelector);
+  main.variable(observer("circleRadiusSelector")).define("circleRadiusSelector", ["Generators", "viewof circleRadiusSelector"], (G, _) => G.input(_));
+  main.variable(observer("viewof xAxisSelect")).define("viewof xAxisSelect", ["select","listCategories"], _xAxisSelect);
+  main.variable(observer("xAxisSelect")).define("xAxisSelect", ["Generators", "viewof xAxisSelect"], (G, _) => G.input(_));
+  main.variable(observer("viewof yAxisSelect")).define("viewof yAxisSelect", ["select","listCategories"], _yAxisSelect);
+  main.variable(observer("yAxisSelect")).define("yAxisSelect", ["Generators", "viewof yAxisSelect"], (G, _) => G.input(_));
+  main.variable(observer("viewof scatterplot")).define("viewof scatterplot", ["DOM","size","d3","margin","xAxis","xAxisSelect","yAxis","yAxisSelect","width","district_DF","circleRadiusSelector","xScale","yScale"], _scatterplot);
+  main.variable(observer("scatterplot")).define("scatterplot", ["Generators", "viewof scatterplot"], (G, _) => G.input(_));
+  main.variable(observer("brushSelection")).define("brushSelection", ["unpack","scatterplot"], _brushSelection);
+  main.variable(observer("viewof barchartt1")).define("viewof barchartt1", ["DOM","chartsize","d3","chart1","xScaleChart1","yScaleChart1","xAxisChart1","yAxisChart1","margin","size","xAxisSelect","chart2","xScaleChart2","yScaleChart2","xAxisChart2","yAxisChart2","yAxisSelect"], _barchartt1);
+  main.variable(observer("barchartt1")).define("barchartt1", ["Generators", "viewof barchartt1"], (G, _) => G.input(_));
+  main.variable(observer("d3")).define("d3", ["require"], _d3);
+  const child1 = runtime.module(define1);
+  main.import("select", child1);
+  main.import("slider", child1);
+  main.variable(observer("district_DF")).define("district_DF", ["d3"], _district_DF);
+  main.variable(observer("district_year_DF")).define("district_year_DF", ["d3"], _district_year_DF);
+  main.variable(observer("listCategories")).define("listCategories", ["district_DF"], _listCategories);
+  main.variable(observer("listYears")).define("listYears", ["district_year_DF"], _listYears);
+  main.variable(observer("chartsize")).define("chartsize", _chartsize);
+  main.variable(observer("margin")).define("margin", _margin);
+  main.variable(observer("unpack")).define("unpack", _unpack);
+  main.variable(observer()).define(["md"], _22);
+  main.variable(observer("size")).define("size", _size);
+  main.variable(observer("xScale")).define("xScale", ["d3","district_DF","xAxisSelect","margin","size"], _xScale);
+  main.variable(observer("yScale")).define("yScale", ["d3","district_DF","yAxisSelect","size","margin"], _yScale);
+  main.variable(observer("xAxis")).define("xAxis", ["d3","xScale"], _xAxis);
+  main.variable(observer("yAxis")).define("yAxis", ["d3","yScale"], _yAxis);
+  main.variable(observer()).define(["md"], _28);
+  main.variable(observer("chart1")).define("chart1", ["brushSelection","listYears","district_year_DF","xAxisSelect"], _chart1);
+  main.variable(observer("xScaleChart1")).define("xScaleChart1", ["d3","chart1","margin","chartsize"], _xScaleChart1);
+  main.variable(observer("yScaleChart1")).define("yScaleChart1", ["d3","chart1","chartsize","margin"], _yScaleChart1);
+  main.variable(observer("xAxisChart1")).define("xAxisChart1", ["chartsize","margin","d3","xScaleChart1"], _xAxisChart1);
+  main.variable(observer("yAxisChart1")).define("yAxisChart1", ["margin","d3","yScaleChart1"], _yAxisChart1);
+  main.variable(observer()).define(["md"], _34);
+  main.variable(observer("chart2margin")).define("chart2margin", _chart2margin);
+  main.variable(observer("chart2")).define("chart2", ["brushSelection","listYears","district_year_DF","yAxisSelect"], _chart2);
+  main.variable(observer("xScaleChart2")).define("xScaleChart2", ["d3","chart2","margin","chartsize"], _xScaleChart2);
+  main.variable(observer("yScaleChart2")).define("yScaleChart2", ["d3","chart2","chartsize","chart2margin"], _yScaleChart2);
+  main.variable(observer("xAxisChart2")).define("xAxisChart2", ["chartsize","chart2margin","d3","xScaleChart2"], _xAxisChart2);
+  main.variable(observer("yAxisChart2")).define("yAxisChart2", ["d3","yScaleChart2"], _yAxisChart2);
+  return main;
+}
