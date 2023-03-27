@@ -30,7 +30,7 @@ twitter_username: jekyllrb
 github_username:  jekyl
 
 # Build settings
-#theme: minima
+theme: Hacker
 #plugins:
   #- jekyll-feed
 remote_theme: pages-themes/architect@v0.2.0
